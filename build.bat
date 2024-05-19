@@ -1,0 +1,1 @@
+pyinstaller -F -i icon.png pre-testing.py

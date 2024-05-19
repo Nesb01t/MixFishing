@@ -1,13 +1,22 @@
-import pkg_resources
+import threading
+import time
 import pyaudio
 import audioop
+
+import win32con
+import win32gui
+
 import modules.mic_device_logger as logger
-import matplotlib.pyplot as plt
+import modules.get_hwnd as gw
+import modules.ingame_interact as ig
 
 CHUNK = 1024
 FORMAT = pyaudio.paInt16
 CHANNELS = 2
 RATE = 48000
+
+# 初始化 window
+hwnd = gw.get_hwnd_by_window_name("魔兽世界")
 
 # 初始化 audio
 audio = pyaudio.PyAudio()
@@ -17,32 +26,56 @@ stream = audio.open(format=FORMAT, channels=CHANNELS,
                     input_device_index=dev_idx,
                     frames_per_buffer=CHUNK)
 
-# 创建一个新的图表窗口
-plt.ion()
-fig, ax = plt.subplots()
+# 初始化变量
+maxValue = 100
+fishing = False
+lastFishTime = time.time()
 
-x = []
-y = []
+# 第一次放线
+ig.pressKey(hwnd, ig.VK_ZERO)  # 放
+time.sleep(3)
+fishing = True
+
+
+def checkFishing():
+    global fishing
+    global lastFishTime
+    time.sleep(3)
+    while True:
+        if percent > 3 and fishing:
+            fishing = False
+            ig.pressKey(hwnd, ig.VK_SLASH)  # loot
+            time.sleep(1)
+            ig.pressKey(hwnd, ig.VK_ZERO)  # release
+            lastFishTime = time.time()
+            time.sleep(3)
+            fishing = True
+        if time.time() - lastFishTime > 20:  # dead zone checking
+            ig.pressKey(hwnd, ig.VK_ZERO)
+            time.sleep(3)
+            lastFishTime = time.time()
+
+
+threading.Thread(target=checkFishing).start()
 
 while True:
-    # 计算 RMS
+    # get RMS
     data = stream.read(CHUNK)
     rms = audioop.rms(data, 2)
-    print(rms)
 
-    # 添加新的数据到x和y的列表
-    if len(x) == 0:
-        x.append(0)
-    else:
-        x.append(x[-1] + 1)
-    y.append(rms)
+    if rms > maxValue:
+        maxValue = rms
 
-    # 清除之前的图表
-    ax.clear()
+    print("\033c", end="")
+    print(f"Hwnd: {hwnd}")
+    print(f"Max Value: {maxValue}")
+    percent = rms / maxValue * 10
+    print(f"Percent: {percent}")
+    for i in range(10):
+        if i < percent:
+            print("#", end="")
+        else:
+            print(" ", end="")
 
-    # 绘制新的图表
-    ax.plot(x, y)
-
-    # 更新图表
-    plt.pause(0.1)
-    plt.show()
+    # end of while
+    time.sleep(0.2)
